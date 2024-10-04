@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced 2D Interactive Orrery - NASA Space Apps Challenge</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: #fff;
+        }
+        #orreryContainer {
+            display: flex;
+            justify-content: space-between;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        canvas {
+            border: 1px solid #fff;
+        }
+        #controls {
+            margin-top: 20px;
+        }
+        button, select {
+            margin: 5px;
+            padding: 5px 10px;
+        }
+        #info {
+            width: 300px;
+            padding: 20px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        #dateDisplay {
+            text-align: center;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center;">Enhanced 2D Interactive Orrery</h1>
+    <p style="text-align: center;">NASA Space Apps Challenge 2024</p>
+    <div id="orreryContainer">
+        <div>
+            <canvas id="orreryCanvas" width="800" height="800"></canvas>
+            <div id="controls">
+                <button id="addComet">Add Random Comet</button>
+                <button id="addAsteroid">Add Random Asteroid</button>
+                <button id="toggleOrbits">Toggle Orbits</button>
+                <button id="toggleLabels">Toggle Labels</button>
+                <select id="zoomLevel">
+                    <option value="1">1x Zoom</option>
+                    <option value="2">2x Zoom</option>
+                    <option value="4">4x Zoom</option>
+                </select>
+                <input type="range" id="speedControl" min="0" max="200" value="100">
+                <label for="speedControl">Speed</label>
+                <button id="addNEO">Add Random NEO</button>
+                <button id="addSpaceProbe">Add Space Probe</button>
+            </div>
+            <div id="dateDisplay"></div>
+        </div>
+        <div id="info">
+            <h2>Solar System</h2>
+            <p>Hover over a planet, moon, or NEO for information.</p>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('orreryCanvas');
+        const ctx = canvas.getContext('2d');
+        const infoDiv = document.getElementById('info');
+        const dateDisplay = document.getElementById('dateDisplay');
+
+        const planets = [
+            { name: "Mercury", color: "#8c7853", radius: 3, distance: 50, speed: 0.02, moons: [], info: "Smallest planet, closest to the Sun. Very hot during the day, very cold at night." },
+            { name: "Venus", color: "#ffd700", radius: 6, distance: 80, speed: 0.015, moons: [], info: "Often called Earth's twin due to similar size. Has a thick atmosphere and is the hottest planet." },
+            { name: "Earth", color: "#0000ff", radius: 6, distance: 110, speed: 0.01, moons: [
+                { name: "Moon", color: "#aaa", radius: 2, distance: 15, speed: 0.05, info: "Earth's only natural satellite, affecting tides and stabilizing Earth's rotation." }
+            ], info: "Our home planet. The only known planet with life. Has one natural satellite, the Moon." },
+            { name: "Mars", color: "#ff0000", radius: 4, distance: 140, speed: 0.008, moons: [
+                { name: "Phobos", color: "#888", radius: 1.5, distance: 10, speed: 0.08, info: "One of Mars' moons, small and irregularly shaped." },
+                { name: "Deimos", color: "#bbb", radius: 1, distance: 20, speed: 0.04, info: "The smaller of Mars' two moons." }
+            ], info: "Known as the Red Planet. Has the largest volcano and canyon in the solar system." },
+            { name: "Jupiter", color: "#ffa500", radius: 12, distance: 200, speed: 0.004, moons: [
+                { name: "Ganymede", color: "#ddd", radius: 3, distance: 25, speed: 0.02, info: "The largest moon in the solar system, larger than Mercury." },
+                { name: "Europa", color: "#fff", radius: 2.5, distance: 30, speed: 0.03, info: "Has a subsurface ocean, potential for extraterrestrial life." }
+            ], info: "Largest planet in our solar system. Known for its Great Red Spot, a giant storm." },
+            { name: "Saturn", color: "#f0e68c", radius: 10, distance: 250, speed: 0.003, moons: [
+                { name: "Titan", color: "#ffcc66", radius: 3, distance: 30, speed: 0.02, info: "The largest moon of Saturn, has a dense atmosphere." },
+                { name: "Enceladus", color: "#eee", radius: 1.5, distance: 40, speed: 0.03, info: "Icy moon with geysers, potentially harboring life." }
+            ], info: "Famous for its prominent ring system. Has numerous moons." },
+            { name: "Uranus", color: "#00ffff", radius: 8, distance: 300, speed: 0.002, moons: [
+                { name: "Miranda", color: "#ccc", radius: 1, distance: 20, speed: 0.04, info: "The smallest of Uranus' major moons, known for its varied terrain." },
+                { name: "Titania", color: "#ddd", radius: 2, distance: 25, speed: 0.03, info: "The largest moon of Uranus." }
+            ], info: "Ice giant planet. Tilts on its side as it orbits the Sun." },
+            { name: "Neptune", color: "#4169e1", radius: 8, distance: 350, speed: 0.001, moons: [
+                { name: "Triton", color: "#b0c4de", radius: 2, distance: 30, speed: 0.02, info: "Largest moon of Neptune, has geysers of liquid nitrogen." }
+            ], info: "The windiest planet in our solar system. Has a dark spot similar to Jupiter's." }
+        ];
+
+        let NEOs = [];
+        let comets = [];
+        let asteroids = [];
+        let spaceProbes = [];
+        let showOrbits = true;
+        let showLabels = true;
+        let speedMultiplier = 1;
+        let zoomLevel = 1;
+        let centerX = canvas.width / 2;
+        let centerY = canvas.height / 2;
+        let animationId;
+
+        function drawSun() {
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 15 * zoomLevel, 0, Math.PI * 2);
+            ctx.fillStyle = "#ffff00";
+            ctx.fill();
+        }
+
+        function drawCelestialBody(body, angle, parentX = centerX, parentY = centerY) {
+            const x = parentX + Math.cos(angle) * body.distance * zoomLevel;
+            const y = parentY + Math.sin(angle) * body.distance * zoomLevel;
+
+            ctx.beginPath();
+            ctx.arc(x, y, body.radius * zoomLevel, 0, Math.PI * 2);
+            ctx.fillStyle = body.color;
+            ctx.fill();
+
+            if (showLabels) {
+                ctx.fillStyle = "#ffffff";
+                ctx.font = `${12 * zoomLevel}px Arial`;
+                ctx.fillText(body.name, x + body.radius * zoomLevel + 5, y);
+            }
+
+            return { x, y };
+        }
+
+        function drawOrbit(distance, parentX = centerX, parentY = centerY) {
+            ctx.beginPath();
+            ctx.arc(parentX, parentY, distance * zoomLevel, 0, Math.PI * 2);
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+            ctx.stroke();
+        }
+
+        function addRandomNEO() {
+            const neo = {
+                name: "NEO-" + (NEOs.length + 1),
+                color: "#ffffff",
+                radius: 2,
+                distance: Math.random() * 100 + 30,
+                speed: Math.random() * 0.02 + 0.005,
+                info: "Near-Earth Object. Potentially hazardous if its orbit intersects with Earth's."
+            };
+            NEOs.push(neo);
+        }
+
+        function addRandomComet() {
+            const comet = {
+                name: "Comet-" + (comets.length + 1),
+                color: "#00ffcc",
+                radius: 3,
+                distance: Math.random() * 200 + 50,
+                speed: Math.random() * 0.01 + 0.002,
+                info: "A comet with a glowing coma and a tail that points away from the Sun."
+            };
+            comets.push(comet);
+        }
+
+        function addRandomAsteroid() {
+            const asteroid = {
+                name: "Asteroid-" + (asteroids.length + 1),
+                color: "#a9a9a9",
+                radius: 1.5,
+                distance: Math.random() * 150 + 40,
+                speed: Math.random() * 0.015 + 0.003,
+                info: "An asteroid, a rocky body that orbits the Sun, mostly found in the asteroid belt."
+            };
+            asteroids.push(asteroid);
+        }
+
+        function addSpaceProbe() {
+            const probe = {
+                name: "Probe-" + (spaceProbes.length + 1),
+                color: "#ff69b4",
+                radius: 2,
+                distance: Math.random() * 250 + 50,
+                speed: Math.random() * 0.01 + 0.001,
+                info: "A space probe sent to explore the outer planets and beyond."
+            };
+            spaceProbes.push(probe);
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawSun();
+
+            if (showOrbits) {
+                planets.forEach(planet => drawOrbit(planet.distance));
+                NEOs.forEach(neo => drawOrbit(neo.distance));
+                comets.forEach(comet => drawOrbit(comet.distance));
+                asteroids.forEach(asteroid => drawOrbit(asteroid.distance));
+                spaceProbes.forEach(probe => drawOrbit(probe.distance));
+            }
+
+            const currentDate = new Date();
+            const elapsedTime = (Date.now() - startTime) * speedMultiplier;
+            currentDate.setTime(currentDate.getTime() + elapsedTime);
+            dateDisplay.textContent = currentDate.toLocaleString();
+
+            [...planets, ...NEOs, ...comets, ...asteroids, ...spaceProbes].forEach((body) => {
+                const angle = elapsedTime * 0.001 * body.speed;
+                const position = drawCelestialBody(body, angle);
+
+                if (body.moons) {
+                    body.moons.forEach(moon => {
+                        const moonAngle = elapsedTime * 0.001 * moon.speed;
+                        drawCelestialBody(moon, moonAngle, position.x, position.y);
+                        if (showOrbits) drawOrbit(moon.distance, position.x, position.y);
+                    });
+                }
+
+                // Highlight on hover
+                const dx = position.x - mouseX;
+                const dy = position.y - mouseY;
+                if (dx * dx + dy * dy < body.radius * body.radius * zoomLevel * zoomLevel) {
+                    infoDiv.innerHTML = `<h2>${body.name}</h2><p>${body.info}</p>`;
+                }
+
+                if (body.moons) {
+                    body.moons.forEach(moon => {
+                        const moonDx = mouseX - position.x - Math.cos(elapsedTime * 0.001 * moon.speed) * moon.distance * zoomLevel;
+                        const moonDy = mouseY - position.y - Math.sin(elapsedTime * 0.001 * moon.speed) * moon.distance * zoomLevel;
+                        if (moonDx * moonDx + moonDy * moonDy < moon.radius * moon.radius * zoomLevel * zoomLevel) {
+                            infoDiv.innerHTML = `<h2>${moon.name}</h2><p>${moon.info}</p>`;
+                        }
+                    });
+                }
+            });
+
+            animationId = requestAnimationFrame(animate);
+        }
+
+        // Event Listeners
+        document.getElementById('toggleOrbits').addEventListener('click', () => showOrbits = !showOrbits);
+        document.getElementById('toggleLabels').addEventListener('click', () => showLabels = !showLabels);
+        document.getElementById('speedControl').addEventListener('input', (e) => speedMultiplier = e.target.value / 100);
+        document.getElementById('zoomLevel').addEventListener('change', (e) => {
+            zoomLevel = parseFloat(e.target.value);
+            centerX = canvas.width / 2;
+            centerY = canvas.height / 2;
+        });
+        document.getElementById('addNEO').addEventListener('click', addRandomNEO);
+        document.getElementById('addComet').addEventListener('click', addRandomComet);
+        document.getElementById('addAsteroid').addEventListener('click', addRandomAsteroid);
+        document.getElementById('addSpaceProbe').addEventListener('click', addSpaceProbe);
+
+        let mouseX = 0, mouseY = 0;
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            infoDiv.innerHTML = '<h2>Solar System</h2><p>Hover over a planet, moon, or NEO for information.</p>';
+        });
+
+        window.addEventListener('blur', () => {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+        });
+
+        window.addEventListener('focus', () => {
+            if (!animationId) {
+                animate();
+            }
+        });
+
+        const startTime = Date.now();
+        animate();
+    </script>
+</body>
+</html>
